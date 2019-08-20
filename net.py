@@ -1,15 +1,14 @@
 import tensorflow.contrib.slim as slim
 import tensorflow as tf
-from CVPR17_training_code.GuidedFilter import guided_filter
 
 
-def model(inputs, is_training, regular=0.0001, use_detail=False, use_se=False):
+def model(inputs, is_training, regular=None, use_detail=False, use_se=False):
 
-    if use_detail:
-        base = guided_filter(inputs, inputs, 15, 1, nhwc=True)  # using guided filter for obtaining base layer
-        net = inputs - base  # detail layer
-    else:
-        net = inputs
+    # if use_detail:
+    #     base = guided_filter(inputs, inputs, 15, 1, nhwc=True)  # using guided filter for obtaining base layer
+    #     net = inputs - base  # detail layer
+    # else:
+    net = inputs
 
     batch_norm_params = {
         'decay': 0.999,
@@ -49,36 +48,10 @@ def model(inputs, is_training, regular=0.0001, use_detail=False, use_se=False):
     return net
 
 
-def model_roi(inputs, is_training, regular=0.0001):
-    batch_norm_params = {
-        'decay': 0.999,
-        'epsilon': 1e-4,
-        'scale': True,
-        'is_training': is_training
-    }
-    with slim.arg_scope([slim.conv2d],
-                        padding='SAME',
-                        activation_fn=tf.nn.relu,
-                        normalizer_fn=slim.batch_norm,
-                        normalizer_params=batch_norm_params,
-                        weights_regularizer=None):
-        net = slim.conv2d(inputs, 128, 9, scope='conv1')
-        net = tf.concat([net, inputs], axis=-1)
-        net = slim.conv2d(net, 128, 1, scope='conv2')
-        net = tf.concat([net, inputs], axis=-1)
-        net = slim.conv2d(net, 64, 5, scope='conv3')
-        net = tf.concat([net, inputs], axis=-1)
-        net = slim.conv2d(net, 64, 3, scope='conv4')
-        net = tf.concat([net, inputs], axis=-1)
-
-    net = slim.conv2d(net, 3, 3, scope='conv5', activation_fn=None)
-    return net
-
-
 def model_my(inputs, is_training, regular=0.0001):
     batch_norm_params = {
-        'decay': 0.999,
-        'epsilon': 1e-4,
+        'decay': 0.997,
+        'epsilon': 1e-5,
         'scale': True,
         'is_training': is_training
     }
@@ -108,3 +81,49 @@ def model_my(inputs, is_training, regular=0.0001):
 
     net = slim.conv2d(net, 3, 1, scope='conv5', activation_fn=None)
     return net
+
+
+def se_block(x, ratio, name):
+    out_dim = x.shape[-1]
+    print("se_block: out_dim = {}, ratio = {}".format(out_dim, ratio))
+    with tf.name_scope(name=name):
+        squeeze = tf.reduce_mean(x, axis=[1, 2])
+        excitation = slim.fully_connected(squeeze, out_dim / ratio, activation_fn=tf.nn.relu)
+        excitation - slim.fully_connected(excitation, out_dim, activation_fn=tf.nn.sigmoid)
+        excitation = tf.reshape(excitation, [-1, 1, 1, out_dim])
+        scale = x * excitation
+    return scale
+
+
+
+def roi(inputs, batch_norm_params):
+    with slim.arg_scope([slim.conv2d],
+                        padding='SAME',
+                        activation_fn=tf.nn.relu,
+                        normalizer_fn=slim.batch_norm,
+                        normalizer_params=batch_norm_params,):
+        net = slim.conv2d(inputs, 128, 9, scope='conv1')
+        net = tf.concat([net, inputs], axis=-1)
+        net = se_block(net, ratio=8, name='se1')
+        net = slim.conv2d(net, 128, 1, scope='conv2')
+        net = tf.concat([net, inputs], axis=-1)
+        net = se_block(net, ratio=8, name='se2')
+        net = slim.conv2d(net, 64, 5, scope='conv3')
+        net = tf.concat([net, inputs], axis=-1)
+        net = se_block(net, ratio=4, name='se3')
+        net = slim.conv2d(net, 64, 3, scope='conv4')
+        net = tf.concat([net, inputs], axis=-1)
+        net = se_block(net, ratio=4, name='se4')
+    net = slim.conv2d(net, 3, 3, scope='conv5', activation_fn=None)
+    return net
+
+
+def choice(inputs, tag, is_training):
+    batch_norm_params = {
+        'decay': 0.997,
+        'epsilon': 1e-5,
+        'scale': True,
+        'is_training': is_training
+    }
+    if tag == 1 or tag == 0:
+        return roi(inputs, batch_norm_params)

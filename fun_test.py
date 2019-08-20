@@ -1,8 +1,6 @@
-import numpy as np
 import data_process as d
 import tensorflow as tf
 import warnings
-from PIL import  Image
 import cv2
 import scipy.misc as sm
 import data_process as dp
@@ -112,9 +110,4 @@ def get_val():
 
 
 if __name__ == '__main__':
-    # run_mse()
-    # # tf_group_tuple()
-    # png_jpg()
-    # i = np.arange(0, 4)
-    # print(i)
     get_val()

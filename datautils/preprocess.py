@@ -2,8 +2,7 @@ import os
 import cv2
 import random
 import shutil
-import sys
-import numpy as np
+
 input_path = './dataset/input/'
 label_path = './dataset/label/'
 
@@ -74,5 +73,3 @@ def split_dataset(ratio = 0.2):
 
 if __name__ == '__main__':
     test()
-    # split_dataset()
-    # print('111')
